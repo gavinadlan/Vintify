@@ -1,0 +1,109 @@
+"Create a music streaming app called Vintify using the Svelte framework. The app should feature the following functionalities:
+
+1. User Authentication:
+
+Implement Login and Registration pages using Firebase Authentication or any other authentication service.
+
+Use simple form validations (e.g., required fields, valid email format) and provide error messages for incorrect inputs.
+
+Allow users to reset password via email.
+
+2. Music Streaming:
+
+Implement a Music Player that allows users to play, pause, skip, and adjust the volume of tracks.
+
+Display information about the currently playing track (e.g., song name, artist, album art).
+
+Implement a progress bar to show the current position of the track being played.
+
+Allow users to view the playlist (dynamic list of songs) during playback.
+
+Allow users to shuffle and repeat the songs in the playlist.
+
+3. Upload Own Music:
+
+Allow users to upload their own songs (MP3 format or other common audio formats) to the platform through a drag-and-drop interface or file picker.
+
+Implement Firebase Storage (or other cloud storage solutions) to securely store the uploaded songs.
+
+After uploading, users can give a title to the song, add a description, and tag the genre.
+
+Once uploaded, the song should be displayed in the user's profile or music library with album art, title, and artist information.
+
+Provide users the option to edit or delete their uploaded songs.
+
+Implement file validation to ensure only supported audio formats (e.g., MP3, WAV) are uploaded.
+
+4. Song and Playlist Display:
+
+Show uploaded songs in a dedicated "My Music" or "Library" section.
+
+Display each song’s album cover (or default cover), song name, artist, and playback controls.
+
+Allow users to listen to songs uploaded by others or the songs they’ve uploaded themselves.
+
+Display the most popular tracks based on play count, likes, or user ratings.
+
+Implement dynamic playlist generation, where users can create personalized playlists from their uploaded songs or public tracks.
+
+5. Search Functionality:
+
+Allow users to search for songs, albums, and artists, including both uploaded tracks and general tracks (from public library).
+
+Display relevant results dynamically as the user types, with the ability to filter by genre, popularity, or artist.
+
+6. Dark Theme Interface:
+
+Design the UI with a dark theme, using white text and vibrant accent colors (e.g., orange).
+
+The layout should be clean, modern, and minimalistic.
+
+Use Svelte for reactive components to make the app feel fast and responsive.
+
+7. Additional Features (Optional):
+
+Users should be able to create, edit, and delete playlists, where they can add both uploaded and public songs.
+
+Implement like buttons, comment sections, and sharing options so users can interact with each other.
+
+Add a rating system where users can rate songs, giving feedback on the music.
+
+Allow users to follow other users, and view their uploaded songs or playlists.
+
+Allow users to share their playlists or songs via social media or direct links.
+
+8. File Handling and Security:
+
+Ensure that the uploaded files (MP3s) are securely stored in a cloud storage service like Firebase Storage or Amazon S3.
+
+Implement file validation on the server-side to check the file type (MP3, WAV, etc.), and size (limit upload size).
+
+Set up security rules to allow users to access only their own uploaded files, ensuring that users cannot modify or download other users' content.
+
+Implement streaming security to prevent unauthorized download of the uploaded songs.
+
+9. Tech Stack Suggestions:
+
+Frontend: Svelte (or SvelteKit) for fast, reactive components; Tailwind CSS for styling; Howler.js for managing audio playback.
+
+Backend/Storage: Firebase Storage for securely storing music files; Firebase Authentication for user login and registration; Firebase Firestore for storing metadata about songs, users, and playlists.
+
+Database: Firebase Firestore (or another NoSQL database) to store metadata such as title, artist, genre, descriptions, etc.
+
+Audio Streaming: Use HTML5 Audio API or Howler.js for streaming MP3 files efficiently.
+
+Cloud Functions (Optional): To handle file validation, background tasks like audio processing, and more.
+
+Key Additions and Updates:
+
+Password Reset for user authentication.
+
+Playlist Management (create, edit, delete) as part of the optional features.
+
+Song Editing and Validation for uploads.
+
+File Handling and Streaming Security to make sure only authorized users can access their own content.
+
+Follow Users and social interaction features, like liking, commenting, and sharing.
+
+Expanded Search Functionality to cover filters for better music discovery.
