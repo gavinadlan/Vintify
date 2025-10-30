@@ -4,6 +4,8 @@
   import { collection, addDoc } from 'firebase/firestore';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
+  import { onAuthStateChanged } from 'firebase/auth';
+  import Navbar from '$lib/components/Navbar.svelte';
 
   let user: any = null;
   let file: File | null = null;
@@ -19,10 +21,14 @@
   let dragOver = false;
 
   onMount(() => {
-    user = auth.currentUser;
-    if (!user) {
-      goto('/login');
-    }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (!currentUser) {
+        goto('/login');
+        return;
+      }
+      user = currentUser;
+    });
+    return unsubscribe;
   });
 
   function handleFileDrop(event: DragEvent) {
@@ -101,14 +107,27 @@
 
     try {
       let albumArtUrl = '';
+      let albumArtPath = '';
       
       if (albumArtFile) {
         const albumArtRef = ref(storage, `album-art/${user.uid}/${Date.now()}_${albumArtFile.name}`);
-        const albumArtSnapshot = await uploadBytesResumable(albumArtRef, albumArtFile);
-        albumArtUrl = await getDownloadURL(albumArtSnapshot.ref);
+        const albumArtTask = uploadBytesResumable(albumArtRef, albumArtFile);
+        
+        await new Promise((resolve, reject) => {
+          albumArtTask.on('state_changed',
+            null,
+            reject,
+            async () => {
+              albumArtUrl = await getDownloadURL(albumArtTask.snapshot.ref);
+              albumArtPath = albumArtTask.snapshot.ref.fullPath;
+              resolve(null);
+            }
+          );
+        });
       }
 
-      const audioRef = ref(storage, `music/${user.uid}/${Date.now()}_${file.name}`);
+      const audioPath = `music/${user.uid}/${Date.now()}_${file.name}`;
+      const audioRef = ref(storage, audioPath);
       const uploadTask = uploadBytesResumable(audioRef, file);
 
       uploadTask.on('state_changed',
@@ -128,7 +147,9 @@
             genre,
             description,
             albumArt: albumArtUrl,
+            albumArtPath,
             audioUrl,
+            audioPath,
             userId: user.uid,
             createdAt: Date.now()
           });
@@ -147,6 +168,8 @@
 <svelte:head>
   <title>Upload Music - Vintify</title>
 </svelte:head>
+
+<Navbar {user} />
 
 <div class="min-h-screen bg-gray-900 py-8 px-4 pb-32">
   <div class="max-w-2xl mx-auto">

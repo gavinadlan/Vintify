@@ -2,10 +2,12 @@
   import { onMount } from 'svelte';
   import { auth, db } from '$lib/firebase/config';
   import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+  import { onAuthStateChanged } from 'firebase/auth';
   import { goto } from '$app/navigation';
   import { playSong } from '$lib/stores/player';
   import type { Song } from '$lib/types';
   import MusicPlayer from '$lib/components/MusicPlayer.svelte';
+  import Navbar from '$lib/components/Navbar.svelte';
 
   let user: any = null;
   let allSongs: Song[] = [];
@@ -14,13 +16,16 @@
   let selectedGenre = '';
   let loading = true;
 
-  onMount(async () => {
-    user = auth.currentUser;
-    if (!user) {
-      goto('/login');
-      return;
-    }
-    await loadAllSongs();
+  onMount(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser) {
+        goto('/login');
+        return;
+      }
+      user = currentUser;
+      await loadAllSongs();
+    });
+    return unsubscribe;
   });
 
   async function loadAllSongs() {
@@ -69,6 +74,8 @@
 <svelte:head>
   <title>Search - Vintify</title>
 </svelte:head>
+
+<Navbar {user} />
 
 <div class="min-h-screen bg-gray-900 py-8 px-4 pb-32">
   <div class="max-w-7xl mx-auto">

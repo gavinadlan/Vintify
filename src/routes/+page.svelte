@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { auth } from '$lib/firebase/config';
   import { onAuthStateChanged, type User } from 'firebase/auth';
+  import Navbar from '$lib/components/Navbar.svelte';
+  import MusicPlayer from '$lib/components/MusicPlayer.svelte';
 
   let user: User | null = null;
 
@@ -14,8 +16,10 @@
 </script>
 
 <div class="min-h-screen bg-gray-900">
+  <Navbar {user} />
+  
   {#if user}
-    <div class="container mx-auto px-4 py-8">
+    <div class="container mx-auto px-4 py-8 pb-32">
       <h1 class="text-4xl font-bold text-white mb-2">Welcome to Vintify</h1>
       <p class="text-gray-400 mb-8">Your personal music streaming platform</p>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -50,3 +54,5 @@
     </div>
   {/if}
 </div>
+
+<MusicPlayer />

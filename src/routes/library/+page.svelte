@@ -7,6 +7,9 @@
   import { playSong } from '$lib/stores/player';
   import type { Song } from '$lib/types';
   import MusicPlayer from '$lib/components/MusicPlayer.svelte';
+  import Navbar from '$lib/components/Navbar.svelte';
+
+  import { onAuthStateChanged } from 'firebase/auth';
 
   let user: any = null;
   let songs: Song[] = [];
@@ -14,13 +17,16 @@
   let editingSong: Song | null = null;
   let editForm = { title: '', artist: '', genre: '', description: '' };
 
-  onMount(async () => {
-    user = auth.currentUser;
-    if (!user) {
-      goto('/login');
-      return;
-    }
-    await loadSongs();
+  onMount(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser) {
+        goto('/login');
+        return;
+      }
+      user = currentUser;
+      await loadSongs();
+    });
+    return unsubscribe;
   });
 
   async function loadSongs() {
@@ -89,11 +95,11 @@
     if (!confirm(`Are you sure you want to delete "${song.title}"?`)) return;
 
     try {
-      const audioRef = ref(storage, song.audioUrl);
+      const audioRef = ref(storage, song.audioPath);
       await deleteObject(audioRef);
 
-      if (song.albumArt) {
-        const albumArtRef = ref(storage, song.albumArt);
+      if (song.albumArtPath) {
+        const albumArtRef = ref(storage, song.albumArtPath);
         try {
           await deleteObject(albumArtRef);
         } catch (e) {
@@ -109,15 +115,13 @@
     }
   }
 
-  async function logout() {
-    await auth.signOut();
-    goto('/');
-  }
 </script>
 
 <svelte:head>
   <title>My Library - Vintify</title>
 </svelte:head>
+
+<Navbar {user} />
 
 <div class="min-h-screen bg-gray-900 py-8 px-4 pb-32">
   <div class="max-w-7xl mx-auto">
@@ -134,9 +138,6 @@
         <a href="/search" class="bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold transition">
           Search
         </a>
-        <button on:click={logout} class="bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold transition">
-          Logout
-        </button>
       </div>
     </div>
 

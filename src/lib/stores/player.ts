@@ -57,13 +57,19 @@ export function nextSong() {
   playerStore.update(state => {
     if (state.queue.length === 0) return state;
     
-    let nextIndex = state.currentIndex + 1;
+    let nextIndex: number;
     
-    if (nextIndex >= state.queue.length) {
-      if (state.repeat) {
-        nextIndex = 0;
-      } else {
-        return { ...state, isPlaying: false };
+    if (state.shuffle) {
+      nextIndex = Math.floor(Math.random() * state.queue.length);
+    } else {
+      nextIndex = state.currentIndex + 1;
+      
+      if (nextIndex >= state.queue.length) {
+        if (state.repeat) {
+          nextIndex = 0;
+        } else {
+          return { ...state, isPlaying: false };
+        }
       }
     }
     
