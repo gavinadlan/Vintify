@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { auth, db } from '$lib/firebase/config';
-  import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+  import { auth } from '$lib/firebase/config';
   import { onAuthStateChanged } from 'firebase/auth';
   import { goto } from '$app/navigation';
   import { playSong } from '$lib/stores/player';
@@ -17,7 +16,8 @@
   let loading = true;
 
   onMount(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    if (!auth) { goto('/login'); return; }
+    const unsubscribe = onAuthStateChanged(auth as any, async (currentUser) => {
       if (!currentUser) {
         goto('/login');
         return;
@@ -31,12 +31,14 @@
   async function loadAllSongs() {
     loading = true;
     try {
-      const q = query(collection(db, 'songs'), orderBy('createdAt', 'desc'));
-      const querySnapshot = await getDocs(q);
-      allSongs = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Song));
+      const res = await fetch('/api/songs');
+      if (!res.ok) {
+        let details = '';
+        try { const j = await res.json(); details = j?.details || j?.error || ''; } catch {}
+        throw new Error(`Server fetch failed${details ? ': ' + details : ''}`);
+      }
+      const data = await res.json();
+      allSongs = (data.songs || []) as Song[];
       filteredSongs = allSongs;
     } catch (error) {
       console.error('Error loading songs:', error);

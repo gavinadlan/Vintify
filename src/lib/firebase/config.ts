@@ -1,17 +1,43 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { browser } from '$app/environment';
+import { env as publicEnv } from '$env/dynamic/public';
+
+const apiKey = publicEnv.PUBLIC_FIREBASE_API_KEY || (import.meta.env.VITE_FIREBASE_API_KEY as string | undefined);
+const projectId = publicEnv.PUBLIC_FIREBASE_PROJECT_ID || (import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined);
+const appId = publicEnv.PUBLIC_FIREBASE_APP_ID || (import.meta.env.VITE_FIREBASE_APP_ID as string | undefined);
+
+const hasFirebaseEnv = Boolean(apiKey && projectId && appId);
+if (browser && !hasFirebaseEnv) {
+  console.warn('Firebase env missing. Set PUBLIC_FIREBASE_API_KEY, PUBLIC_FIREBASE_PROJECT_ID, PUBLIC_FIREBASE_APP_ID');
+}
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.appspot.com`,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey,
+  authDomain: projectId ? `${projectId}.firebaseapp.com` : undefined,
+  projectId,
+  storageBucket: projectId ? `${projectId}.appspot.com` : undefined,
+  appId,
 };
 
-export const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+const appInstance = hasFirebaseEnv ? (getApps().length ? getApp() : initializeApp(firebaseConfig as any)) : null;
+
+export const app = appInstance as any;
+export const auth = browser && appInstance ? getAuth(appInstance) : null;
+let dbInstance: any = null;
+if (appInstance) {
+  if (browser) {
+    dbInstance = initializeFirestore(appInstance, {
+      experimentalForceLongPolling: true,
+      experimentalAutoDetectLongPolling: false,
+      useFetchStreams: false,
+      ignoreUndefinedProperties: true
+    } as any);
+  } else {
+    dbInstance = getFirestore(appInstance);
+  }
+}
+export const db = dbInstance;
+export const storage = appInstance ? getStorage(appInstance) : null;

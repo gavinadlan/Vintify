@@ -1,7 +1,5 @@
 <script lang="ts">
-  import { auth, storage, db } from '$lib/firebase/config';
-  import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-  import { collection, addDoc } from 'firebase/firestore';
+  import { auth } from '$lib/firebase/config';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { onAuthStateChanged } from 'firebase/auth';
@@ -20,8 +18,62 @@
   let error = '';
   let dragOver = false;
 
+  async function getSignature({ folder, public_id, resource_type }: { folder?: string; public_id?: string; resource_type: 'image' | 'video' | 'raw' }) {
+    const res = await fetch('/api/cloudinary/signature', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder, public_id, resource_type })
+    });
+    if (!res.ok) throw new Error('Failed to get Cloudinary signature');
+    return res.json() as Promise<{ signature: string; timestamp: number; api_key: string; cloud_name: string; resource_type: string }>;
+  }
+
+  async function uploadToCloudinary(file: File, opts: { folder: string; resource_type: 'image' | 'video' | 'raw'; onProgress?: (p: number) => void }) {
+    const { folder, resource_type, onProgress } = opts;
+    const { signature, timestamp, api_key, cloud_name } = await getSignature({ folder, resource_type });
+
+    const form = new FormData();
+    form.append('file', file);
+    form.append('api_key', api_key);
+    form.append('timestamp', String(timestamp));
+    form.append('folder', folder);
+    form.append('signature', signature);
+
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${cloud_name}/${resource_type}/upload`;
+
+    // Use XHR to get progress events (fetch does not support upload progress)
+    const xhr = new XMLHttpRequest();
+    const result: Promise<{ secure_url: string; public_id: string }> = new Promise((resolve, reject) => {
+      xhr.upload.onprogress = (e) => {
+        if (onProgress && e.lengthComputable) {
+          const percent = (e.loaded / e.total) * 100;
+          onProgress(percent);
+        }
+      };
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState === 4) {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const json = JSON.parse(xhr.responseText);
+              resolve({ secure_url: json.secure_url, public_id: json.public_id });
+            } catch (err) {
+              reject(err);
+            }
+          } else {
+            reject(new Error(`Cloudinary upload failed (${xhr.status})`));
+          }
+        }
+      };
+      xhr.onerror = () => reject(new Error('Network error during Cloudinary upload'));
+    });
+    xhr.open('POST', uploadUrl, true);
+    xhr.send(form);
+    return result;
+  }
+
   onMount(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    if (!auth) { goto('/login'); return; }
+    const unsubscribe = onAuthStateChanged(auth as any, (currentUser) => {
       if (!currentUser) {
         goto('/login');
         return;
@@ -107,56 +159,45 @@
 
     try {
       let albumArtUrl = '';
-      let albumArtPath = '';
-      
+      let albumArtPublicId = '';
+
       if (albumArtFile) {
-        const albumArtRef = ref(storage, `album-art/${user.uid}/${Date.now()}_${albumArtFile.name}`);
-        const albumArtTask = uploadBytesResumable(albumArtRef, albumArtFile);
-        
-        await new Promise((resolve, reject) => {
-          albumArtTask.on('state_changed',
-            null,
-            reject,
-            async () => {
-              albumArtUrl = await getDownloadURL(albumArtTask.snapshot.ref);
-              albumArtPath = albumArtTask.snapshot.ref.fullPath;
-              resolve(null);
-            }
-          );
+        const imageFolder = `album-art/${user.uid}`;
+        const imageRes = await uploadToCloudinary(albumArtFile, {
+          folder: imageFolder,
+          resource_type: 'image'
         });
+        albumArtUrl = imageRes.secure_url;
+        albumArtPublicId = imageRes.public_id;
       }
 
-      const audioPath = `music/${user.uid}/${Date.now()}_${file.name}`;
-      const audioRef = ref(storage, audioPath);
-      const uploadTask = uploadBytesResumable(audioRef, file);
+      // Upload audio as resource_type "raw" to preserve original file without Cloudinary re-encoding
+      const audioFolder = `music/${user.uid}`;
+      const audioRes = await uploadToCloudinary(file, {
+        folder: audioFolder,
+        resource_type: 'raw',
+        onProgress: (p) => { uploadProgress = p; }
+      });
 
-      uploadTask.on('state_changed',
-        (snapshot) => {
-          uploadProgress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        },
-        (error) => {
-          console.error('Upload error:', error);
-          throw error;
-        },
-        async () => {
-          const audioUrl = await getDownloadURL(uploadTask.snapshot.ref);
-          
-          await addDoc(collection(db, 'songs'), {
-            title,
-            artist,
-            genre,
-            description,
-            albumArt: albumArtUrl,
-            albumArtPath,
-            audioUrl,
-            audioPath,
-            userId: user.uid,
-            createdAt: Date.now()
-          });
+      const res = await fetch('/api/songs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          artist,
+          genre,
+          description,
+          albumArt: albumArtUrl,
+          albumArtPublicId,
+          audioUrl: audioRes.secure_url,
+          audioPublicId: audioRes.public_id,
+          userId: user.uid,
+          createdAt: Date.now()
+        })
+      });
+      if (!res.ok) throw new Error('Server save failed');
 
-          goto('/library');
-        }
-      );
+      goto('/library');
     } catch (err) {
       console.error('Upload error:', err);
       error = 'Failed to upload song. Please try again.';
@@ -187,6 +228,8 @@
         class="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center transition"
         class:border-orange-500={dragOver}
         class:bg-gray-700={dragOver}
+        role="button"
+        tabindex="0"
         on:dragover={(e) => { e.preventDefault(); dragOver = true; }}
         on:dragleave={() => dragOver = false}
         on:drop={handleFileDrop}

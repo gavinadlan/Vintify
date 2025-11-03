@@ -3,16 +3,17 @@
   import { Howl } from 'howler';
   import { playerStore, togglePlay, setVolume, setProgress, setDuration, nextSong, previousSong, toggleShuffle, toggleRepeat } from '$lib/stores/player';
 
-  let howl: Howl | null = null;
+  let howl: any = null;
   let progressInterval: number;
   let isDragging = false;
+  let currentSrc = '';
 
-  $: if ($playerStore.currentSong && howl?.state() === 'unloaded') {
-    loadSong($playerStore.currentSong.audioUrl);
-  }
-
-  $: if ($playerStore.currentSong && (!howl || howl._src !== $playerStore.currentSong.audioUrl)) {
-    loadSong($playerStore.currentSong.audioUrl);
+  $: if ($playerStore.currentSong) {
+    const nextSrc = $playerStore.currentSong.audioUrl;
+    if (nextSrc && nextSrc !== currentSrc) {
+      loadSong(nextSrc);
+      currentSrc = nextSrc;
+    }
   }
 
   $: if (howl) {
@@ -41,10 +42,10 @@
       onend: function() {
         handleSongEnd();
       },
-      onloaderror: function(id, error) {
+      onloaderror: function(id: number, error: unknown) {
         console.error('Error loading audio:', error);
       },
-      onplayerror: function(id, error) {
+      onplayerror: function(id: number, error: unknown) {
         console.error('Error playing audio:', error);
       }
     });
@@ -89,6 +90,18 @@
   function handleVolumeChange(event: Event) {
     const target = event.target as HTMLInputElement;
     setVolume(parseFloat(target.value));
+  }
+
+  function handleTogglePlay() {
+    if (!howl) return;
+    if ($playerStore.isPlaying) {
+      howl.pause();
+      stopProgressTracking();
+    } else {
+      howl.play();
+      startProgressTracking();
+    }
+    togglePlay();
   }
 
   function formatTime(seconds: number): string {
@@ -150,7 +163,7 @@
             </button>
 
             <button
-              on:click={togglePlay}
+              on:click={handleTogglePlay}
               class="bg-orange-500 hover:bg-orange-600 text-white rounded-full p-2 transition"
               title={$playerStore.isPlaying ? 'Pause' : 'Play'}
             >

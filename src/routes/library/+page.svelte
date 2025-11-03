@@ -1,8 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { auth, db, storage } from '$lib/firebase/config';
-  import { collection, query, where, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
-  import { ref, deleteObject } from 'firebase/storage';
+  import { auth } from '$lib/firebase/config';
   import { goto } from '$app/navigation';
   import { playSong } from '$lib/stores/player';
   import type { Song } from '$lib/types';
@@ -18,7 +16,8 @@
   let editForm = { title: '', artist: '', genre: '', description: '' };
 
   onMount(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    if (!auth) { goto('/login'); return; }
+    const unsubscribe = onAuthStateChanged(auth as any, async (currentUser) => {
       if (!currentUser) {
         goto('/login');
         return;
@@ -34,12 +33,14 @@
     
     loading = true;
     try {
-      const q = query(collection(db, 'songs'), where('userId', '==', user.uid));
-      const querySnapshot = await getDocs(q);
-      songs = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Song));
+      const res = await fetch(`/api/songs?userId=${encodeURIComponent(user.uid)}`);
+      if (!res.ok) {
+        let details = '';
+        try { const j = await res.json(); details = j?.details || j?.error || ''; } catch {}
+        throw new Error(`Server fetch failed${details ? ': ' + details : ''}`);
+      }
+      const data = await res.json();
+      songs = (data.songs || []) as Song[];
     } catch (error) {
       console.error('Error loading songs:', error);
     } finally {
@@ -75,10 +76,14 @@
     if (!editingSong) return;
 
     try {
-      const songRef = doc(db, 'songs', editingSong.id);
-      await updateDoc(songRef, editForm);
+      const res = await fetch(`/api/songs/${encodeURIComponent(editingSong!.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm)
+      });
+      if (!res.ok) throw new Error('Server update failed');
       
-      const songIndex = songs.findIndex(s => s.id === editingSong.id);
+      const songIndex = songs.findIndex(s => s.id === editingSong!.id);
       if (songIndex !== -1) {
         songs[songIndex] = { ...songs[songIndex], ...editForm };
         songs = songs;
@@ -95,19 +100,10 @@
     if (!confirm(`Are you sure you want to delete "${song.title}"?`)) return;
 
     try {
-      const audioRef = ref(storage, song.audioPath);
-      await deleteObject(audioRef);
+      // Files are on Cloudinary now; deletion of media is handled out of scope here.
 
-      if (song.albumArtPath) {
-        const albumArtRef = ref(storage, song.albumArtPath);
-        try {
-          await deleteObject(albumArtRef);
-        } catch (e) {
-          console.log('Album art already deleted or not found');
-        }
-      }
-
-      await deleteDoc(doc(db, 'songs', song.id));
+      const res = await fetch(`/api/songs/${encodeURIComponent(song.id)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Server delete failed');
       songs = songs.filter(s => s.id !== song.id);
     } catch (error) {
       console.error('Error deleting song:', error);
@@ -233,8 +229,9 @@
       
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Title</label>
+          <label for="edit-title" class="block text-sm font-medium text-gray-300 mb-2">Title</label>
           <input
+            id="edit-title"
             type="text"
             bind:value={editForm.title}
             class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
@@ -242,8 +239,9 @@
         </div>
         
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Artist</label>
+          <label for="edit-artist" class="block text-sm font-medium text-gray-300 mb-2">Artist</label>
           <input
+            id="edit-artist"
             type="text"
             bind:value={editForm.artist}
             class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
@@ -251,8 +249,9 @@
         </div>
         
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Genre</label>
+          <label for="edit-genre" class="block text-sm font-medium text-gray-300 mb-2">Genre</label>
           <select
+            id="edit-genre"
             bind:value={editForm.genre}
             class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
           >
@@ -270,8 +269,9 @@
         </div>
         
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Description</label>
+          <label for="edit-description" class="block text-sm font-medium text-gray-300 mb-2">Description</label>
           <textarea
+            id="edit-description"
             bind:value={editForm.description}
             rows="3"
             class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-orange-500"

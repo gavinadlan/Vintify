@@ -11,6 +11,10 @@
   let loading = false;
 
   async function handleRegister() {
+    if (!auth) {
+      error = 'Firebase is not configured. Please set PUBLIC_FIREBASE_* envs and restart.';
+      return;
+    }
     if (!name || !email || !password || !confirmPassword) {
       error = 'Please fill in all fields';
       return;
@@ -35,7 +39,7 @@
     loading = true;
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth as any, email, password);
       await updateProfile(userCredential.user, { displayName: name });
       goto('/library');
     } catch (err: any) {
