@@ -7,7 +7,9 @@
   export let user: User | null = null;
 
   async function handleLogout() {
-    await auth.signOut();
+    if (auth) {
+      await auth.signOut();
+    }
     goto('/');
   }
 </script>
