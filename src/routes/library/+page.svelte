@@ -33,16 +33,20 @@
     
     loading = true;
     try {
+      console.log('Loading songs for userId:', user.uid);
       const res = await fetch(`/api/songs?userId=${encodeURIComponent(user.uid)}`);
       if (!res.ok) {
         let details = '';
         try { const j = await res.json(); details = j?.details || j?.error || ''; } catch {}
+        console.error('Failed to fetch songs:', details);
         throw new Error(`Server fetch failed${details ? ': ' + details : ''}`);
       }
       const data = await res.json();
+      console.log('Songs loaded:', data.songs?.length || 0, 'songs');
       songs = (data.songs || []) as Song[];
     } catch (error) {
       console.error('Error loading songs:', error);
+      alert('Gagal memuat lagu. Cek console untuk detail error.');
     } finally {
       loading = false;
     }
