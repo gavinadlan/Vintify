@@ -50,5 +50,5 @@ This file contains instructions for setting up Firebase Security Rules for Vinti
 
 ### Add Authorized Domain (After Deployment)
 1. In Firebase Console, go to **Authentication** > **Settings** > **Authorized domains**
-2. Add your Replit domain (e.g., `yourproject.repl.co` or custom domain)
+2. Add your deployment domain (e.g., `yourdomain.com` or custom domain)
 3. This allows Firebase to redirect users back to your app after authentication

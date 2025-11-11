@@ -83,10 +83,11 @@ A modern music streaming app built with SvelteKit where users can upload, manage
 
 3. Set up Firebase:
    - Follow the instructions in `FIREBASE_SETUP.md`
-   - Configure your Firebase secrets in Replit Secrets:
-     - `VITE_FIREBASE_API_KEY`
-     - `VITE_FIREBASE_APP_ID`
-     - `VITE_FIREBASE_PROJECT_ID`
+   - Create a `.env` file in the root directory with:
+     - `PUBLIC_FIREBASE_API_KEY`
+     - `PUBLIC_FIREBASE_PROJECT_ID`
+     - `PUBLIC_FIREBASE_APP_ID`
+   - See `FIREBASE_ENV_SETUP.md` for detailed instructions
 
 4. Deploy Firebase Security Rules:
    - Copy `firestore.rules` to Firebase Console (Firestore Database > Rules)
