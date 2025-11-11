@@ -11,6 +11,10 @@ export interface Song {
   userId: string;
   createdAt: number;
   duration?: number;
+  // External source fields (for Spotify, etc.)
+  sourceType?: 'upload' | 'external';
+  externalId?: string;
+  externalSource?: string; // 'spotify', 'youtube', etc.
 }
 
 export interface PlayerState {
