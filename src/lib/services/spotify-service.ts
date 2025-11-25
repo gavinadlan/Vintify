@@ -84,10 +84,14 @@ export class SpotifyService {
    */
   async searchTracks(query: string, limit: number = 20, clientId?: string, clientSecret?: string): Promise<SpotifyTrack[]> {
     try {
+      console.log('Getting Spotify access token...');
       const token = await this.getAccessToken(clientId, clientSecret);
+      console.log('Access token obtained, searching for:', query);
+      
       const encodedQuery = encodeURIComponent(query);
       const url = `https://api.spotify.com/v1/search?q=${encodedQuery}&type=track&limit=${limit}`;
 
+      console.log('Fetching from Spotify API:', url);
       const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`
@@ -95,12 +99,21 @@ export class SpotifyService {
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Spotify API error: ${error}`);
+        const errorText = await response.text();
+        console.error('Spotify API error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        });
+        throw new Error(`Spotify API error (${response.status}): ${errorText}`);
       }
 
       const data = (await response.json()) as SpotifySearchResponse;
-      return data.tracks.items;
+      console.log('Spotify API response:', {
+        total: data.tracks?.total || 0,
+        items: data.tracks?.items?.length || 0
+      });
+      return data.tracks.items || [];
     } catch (error) {
       console.error('Spotify search error:', error);
       throw error;

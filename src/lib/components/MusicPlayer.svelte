@@ -33,6 +33,13 @@
       howl.unload();
     }
 
+    // Check if this is a Spotify external URL (not playable audio)
+    if (url.includes('open.spotify.com') && !url.includes('.mp3') && !url.includes('preview')) {
+      console.warn('Spotify external URL cannot be played directly. Only preview URLs are playable.');
+      alert('This track cannot be played directly. Only 30-second previews are available. Click the Spotify icon to open in Spotify app.');
+      return;
+    }
+
     howl = new Howl({
       src: [url],
       html5: true,
@@ -44,9 +51,16 @@
       },
       onloaderror: function(id: number, error: unknown) {
         console.error('Error loading audio:', error);
+        // If it's a Spotify track, show helpful message
+        if (url.includes('spotify.com')) {
+          alert('Cannot play this track. Spotify preview URLs may be unavailable or expired. Try opening in Spotify app instead.');
+        }
       },
       onplayerror: function(id: number, error: unknown) {
         console.error('Error playing audio:', error);
+        if (url.includes('spotify.com')) {
+          alert('Cannot play this track. Spotify preview URLs may be unavailable or expired.');
+        }
       }
     });
 
