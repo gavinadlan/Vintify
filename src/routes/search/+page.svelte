@@ -22,6 +22,7 @@
   let spotifyLoading = false;
   let spotifyError = '';
   let addingToLibrary: string | null = null;
+  let showOnlyWithPreview = true; // Default: only show tracks with preview
 
   onMount(() => {
     if (!auth) { goto('/login'); return; }
@@ -82,21 +83,83 @@
     spotifyError = '';
 
     try {
-      const res = await fetch(`/api/spotify/search?q=${encodeURIComponent(searchQuery)}&limit=20`);
+      console.log('Searching Spotify for:', searchQuery);
+      const res = await fetch(`/api/spotify/search?q=${encodeURIComponent(searchQuery)}&limit=50`);
+      
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Failed to search Spotify');
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Spotify API error response:', {
+          status: res.status,
+          statusText: res.statusText,
+          errorData
+        });
+        const error = new Error(errorData.error || errorData.details || 'Failed to search Spotify');
+        (error as any).details = errorData.details;
+        throw error;
       }
+      
       const data = await res.json();
-      spotifyTracks = data.tracks || [];
+      let allTracks = data.tracks || [];
+      
+      console.log('Spotify search results:', {
+        totalTracks: allTracks.length,
+        tracksWithPreview: allTracks.filter((t: SpotifyTrack) => t.preview_url).length,
+        showOnlyWithPreview,
+        firstTrack: allTracks[0] ? { name: allTracks[0].name, hasPreview: !!allTracks[0].preview_url } : null
+      });
+      
+      if (allTracks.length === 0) {
+        console.warn('Spotify returned 0 tracks for query:', searchQuery);
+        spotifyError = 'No tracks found. Try a different search query or uncheck "Show only tracks with preview" to see all results.';
+        spotifyTracks = [];
+        return;
+      }
+      
+      // Store all tracks first (for filtering later)
+      spotifyTracks = allTracks;
+      
+      // Filter will be applied by computed property filteredSpotifyTracks
     } catch (err: any) {
       console.error('Spotify search error:', err);
-      spotifyError = err.message || 'Failed to search Spotify. Make sure Spotify credentials are configured.';
+      let errorMessage = err.message || 'Failed to search Spotify';
+      
+      // Parse error details if available
+      if (err.details) {
+        errorMessage = err.details;
+      }
+      
+      // Add helpful message for common errors
+      if (errorMessage.includes('not configured')) {
+        errorMessage += '. Pastikan sudah restart server setelah update .env file.';
+      } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        errorMessage = 'Spotify credentials invalid. Please check your Client ID and Client Secret.';
+      } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+        errorMessage = 'Spotify API access denied. Check your app permissions in Spotify Dashboard.';
+      }
+      
+      spotifyError = errorMessage;
       spotifyTracks = [];
     } finally {
       spotifyLoading = false;
     }
   }
+
+  // Re-filter when checkbox changes (client-side filter on existing results)
+  function handlePreviewFilterChange() {
+    // Just filter the existing results without re-fetching
+    if (showOnlyWithPreview && spotifyTracks.length > 0) {
+      // Filter is already applied in searchSpotify, but we need to re-apply if we have cached results
+      // Actually, let's just re-run the search to get more results
+      if (searchQuery.trim()) {
+        searchSpotify();
+      }
+    }
+  }
+
+  // Computed property for filtered tracks
+  $: filteredSpotifyTracks = showOnlyWithPreview 
+    ? spotifyTracks.filter((track: SpotifyTrack) => track.preview_url)
+    : spotifyTracks;
 
   async function addSpotifyTrackToLibrary(track: SpotifyTrack) {
     if (!user) {
@@ -108,13 +171,20 @@
 
     try {
       // Convert Spotify track to Song format
+      // Only save if preview_url exists, otherwise warn user
+      if (!track.preview_url) {
+        alert('Track ini tidak memiliki preview audio. Hanya track dengan preview 30 detik yang bisa diputar di aplikasi ini. Silakan buka di Spotify untuk mendengarkan full track.');
+        addingToLibrary = null;
+        return;
+      }
+
       const songData = {
         title: track.name,
         artist: track.artists.map(a => a.name).join(', '),
         genre: 'Pop', // Default, bisa diubah nanti
-        description: `From Spotify - ${track.album.name}`,
+        description: `From Spotify - ${track.album.name} (30s preview)`,
         albumArt: track.album.images[0]?.url || track.album.images[1]?.url || '',
-        audioUrl: track.preview_url || track.external_urls.spotify,
+        audioUrl: track.preview_url, // Only use preview_url
         userId: user.uid,
         createdAt: Date.now(),
         sourceType: 'external',
@@ -173,6 +243,7 @@
       }
     }
   }
+
 
   const genres = ['Pop', 'Rock', 'Hip Hop', 'Electronic', 'Jazz', 'Classical', 'R&B', 'Country', 'Indie', 'Other'];
 </script>
@@ -252,20 +323,47 @@
               {/each}
             </select>
           </div>
+        {:else}
+          <div class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="preview-only"
+              bind:checked={showOnlyWithPreview}
+              on:change={handlePreviewFilterChange}
+              class="w-4 h-4 text-orange-500 bg-gray-700 border-gray-600 rounded focus:ring-orange-500"
+            />
+            <label for="preview-only" class="text-sm text-gray-300 cursor-pointer">
+              Show only tracks with preview
+            </label>
+          </div>
         {/if}
       </div>
 
-      <div class="mt-4 text-sm text-gray-400">
-        {#if searchMode === 'library'}
-          Found {filteredSongs.length} {filteredSongs.length === 1 ? 'song' : 'songs'}
-        {:else}
-          {#if spotifyLoading}
-            Searching Spotify...
-          {:else if spotifyError}
-            <span class="text-red-400">{spotifyError}</span>
+      <div class="mt-4 space-y-2">
+        <div class="text-sm text-gray-400">
+          {#if searchMode === 'library'}
+            Found {filteredSongs.length} {filteredSongs.length === 1 ? 'song' : 'songs'}
           {:else}
-            Found {spotifyTracks.length} {spotifyTracks.length === 1 ? 'track' : 'tracks'} on Spotify
+            {#if spotifyLoading}
+              Searching Spotify...
+            {:else if spotifyError}
+              <span class="text-red-400">{spotifyError}</span>
+            {:else}
+              Found {filteredSpotifyTracks.length} {filteredSpotifyTracks.length === 1 ? 'track' : 'tracks'} on Spotify
+              {#if spotifyTracks.length > 0 && !showOnlyWithPreview}
+                ({spotifyTracks.filter((t: SpotifyTrack) => t.preview_url).length} with preview available)
+              {/if}
+            {/if}
           {/if}
+        </div>
+        {#if searchMode === 'spotify' && spotifyTracks.length > 0}
+          <div class="text-xs text-gray-500 bg-gray-700/50 px-3 py-2 rounded">
+            <span class="font-semibold">Note:</span> Not all Spotify tracks have 30-second previews. 
+            Tracks without preview can only be opened in Spotify app. 
+            {#if !showOnlyWithPreview}
+              Enable "Show only tracks with preview" to filter results.
+            {/if}
+          </div>
         {/if}
       </div>
     </div>
@@ -334,17 +432,29 @@
         <div class="bg-red-500/10 border border-red-500 text-red-500 px-4 py-3 rounded mb-6">
           {spotifyError}
         </div>
-      {:else if spotifyTracks.length === 0 && searchQuery.trim()}
+      {:else if filteredSpotifyTracks.length === 0 && searchQuery.trim()}
         <div class="text-center py-20">
           <svg class="w-20 h-20 mx-auto mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          <h2 class="text-2xl font-semibold text-white mb-2">No tracks found</h2>
-          <p class="text-gray-400">Try a different search query</p>
+          <h2 class="text-2xl font-semibold text-white mb-2">
+            {#if showOnlyWithPreview && spotifyTracks.length > 0}
+              No tracks with preview found
+            {:else}
+              No tracks found
+            {/if}
+          </h2>
+          <p class="text-gray-400">
+            {#if showOnlyWithPreview && spotifyTracks.length > 0}
+              Try unchecking "Show only tracks with preview" to see all results
+            {:else}
+              Try a different search query
+            {/if}
+          </p>
         </div>
-      {:else if spotifyTracks.length > 0}
+      {:else if filteredSpotifyTracks.length > 0}
         <div class="grid grid-cols-1 gap-4">
-          {#each spotifyTracks as track (track.id)}
+          {#each filteredSpotifyTracks as track (track.id)}
             <div class="bg-gray-800 rounded-lg p-4 flex items-center gap-4 hover:bg-gray-750 transition">
               <!-- Album Art -->
               <div class="w-16 h-16 bg-gray-700 rounded flex-shrink-0 overflow-hidden">
@@ -365,16 +475,23 @@
                 <p class="text-gray-400 text-sm truncate">
                   {track.artists.map(a => a.name).join(', ')} • {track.album.name}
                 </p>
-                <p class="text-gray-500 text-xs mt-1">{formatDuration(track.duration_ms)}</p>
+                <div class="flex items-center gap-2 mt-1">
+                  <p class="text-gray-500 text-xs">{formatDuration(track.duration_ms)}</p>
+                  {#if track.preview_url}
+                    <span class="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded">30s preview</span>
+                  {:else}
+                    <span class="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded">No preview</span>
+                  {/if}
+                </div>
               </div>
 
               <!-- Actions -->
               <div class="flex gap-2">
                 <button
                   on:click={() => addSpotifyTrackToLibrary(track)}
-                  disabled={addingToLibrary === track.id}
+                  disabled={addingToLibrary === track.id || !track.preview_url}
                   class="p-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition flex-shrink-0"
-                  title="Add to Library"
+                  title={track.preview_url ? "Add to Library (30s preview)" : "No preview available"}
                 >
                   {#if addingToLibrary === track.id}
                     <svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
