@@ -40,8 +40,13 @@ A modern music streaming app built with SvelteKit where users can upload, manage
 - Album art thumbnails
 
 ### 🔍 Search & Discovery
-- Search by title, artist, or description
-- Filter by genre
+- **My Library**: Search by title, artist, or description in your uploaded songs
+- **Spotify Integration**: Search and discover tracks from Spotify
+  - Search millions of tracks from Spotify's catalog
+  - Filter to show only tracks with 30-second previews
+  - Add Spotify tracks to your library
+  - Play 30-second previews directly in the app
+- Filter by genre (for library)
 - Real-time search results
 - Play songs directly from search
 
