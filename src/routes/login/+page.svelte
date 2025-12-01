@@ -9,6 +9,14 @@
   let loading = false;
 
   async function handleLogin() {
+    error = '';
+    
+    if (!auth) {
+      error = 'Firebase is not configured. Please set PUBLIC_FIREBASE_* envs and restart.';
+      console.error('Firebase auth not available');
+      return;
+    }
+    
     if (!email || !password) {
       error = 'Please fill in all fields';
       return;
@@ -19,21 +27,34 @@
       return;
     }
 
-    error = '';
     loading = true;
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      console.log('Attempting to login with email:', email);
+      await signInWithEmailAndPassword(auth as any, email, password);
+      console.log('Login successful, redirecting...');
       goto('/library');
     } catch (err: any) {
+      console.error('Login error:', err);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
+      
       if (err.code === 'auth/user-not-found') {
-        error = 'No account found with this email';
+        error = 'No account found with this email. Please register first.';
       } else if (err.code === 'auth/wrong-password') {
-        error = 'Incorrect password';
+        error = 'Incorrect password. Please try again.';
       } else if (err.code === 'auth/invalid-credential') {
-        error = 'Invalid email or password';
+        error = 'Invalid email or password. Make sure you have registered an account first.';
+      } else if (err.code === 'auth/invalid-email') {
+        error = 'Invalid email address format.';
+      } else if (err.code === 'auth/too-many-requests') {
+        error = 'Too many failed login attempts. Please try again later.';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        error = 'Email/password login is not enabled. Please contact support.';
+      } else if (err.code === 'auth/network-request-failed') {
+        error = 'Network error. Please check your internet connection.';
       } else {
-        error = 'Failed to login. Please try again.';
+        error = `Failed to login: ${err.message || 'Please try again.'}`;
       }
     } finally {
       loading = false;
@@ -48,7 +69,18 @@
 
     {#if error}
       <div class="bg-red-500/10 border border-red-500 text-red-500 px-4 py-3 rounded mb-4">
-        {error}
+        <p class="font-medium">{error}</p>
+        {#if error.includes('Invalid email or password') || error.includes('Incorrect password')}
+          <div class="text-sm text-red-400 mt-2 space-y-1">
+            <p>• Make sure you're using the correct password</p>
+            <p>• <a href="/forgot-password" class="underline font-medium">Forgot password?</a> Reset it here</p>
+            <p>• Don't have an account? <a href="/register" class="underline font-medium">Register here</a></p>
+          </div>
+        {:else if error.includes('No account found')}
+          <p class="text-sm text-red-400 mt-2">
+            Don't have an account? <a href="/register" class="underline font-medium">Register here</a>
+          </p>
+        {/if}
       </div>
     {/if}
 
