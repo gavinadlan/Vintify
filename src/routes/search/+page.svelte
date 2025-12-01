@@ -23,6 +23,14 @@
   let spotifyError = '';
   let addingToLibrary: string | null = null;
   let showOnlyWithPreview = true; // Default: only show tracks with preview
+  
+  // Modal state
+  let showModal = false;
+  let modalTitle = '';
+  let modalMessage = '';
+  let modalType: 'success' | 'confirm' | 'error' = 'success';
+  let modalConfirmCallback: (() => void) | null = null;
+  let modalCancelCallback: (() => void) | null = null;
 
   onMount(() => {
     if (!auth) { goto('/login'); return; }
@@ -163,7 +171,7 @@
 
   async function addSpotifyTrackToLibrary(track: SpotifyTrack) {
     if (!user) {
-      alert('You must be logged in to add songs');
+      showErrorModal('Login Required', 'You must be logged in to add songs to your library.');
       return;
     }
 
@@ -173,45 +181,67 @@
       // Convert Spotify track to Song format
       // Only save if preview_url exists, otherwise warn user
       if (!track.preview_url) {
-        alert('Track ini tidak memiliki preview audio. Hanya track dengan preview 30 detik yang bisa diputar di aplikasi ini. Silakan buka di Spotify untuk mendengarkan full track.');
-        addingToLibrary = null;
+        showConfirmModal(
+          'No Preview Available',
+          'This track does not have a 30-second preview. You can still add it to your library, but it will open in Spotify app for playback. Would you like to add it anyway?',
+          () => {
+            // User confirmed, continue with adding
+            addTrackToLibrary(track);
+          },
+          () => {
+            // User cancelled
+            addingToLibrary = null;
+          }
+        );
         return;
       }
-
-      const songData = {
-        title: track.name,
-        artist: track.artists.map(a => a.name).join(', '),
-        genre: 'Pop', // Default, bisa diubah nanti
-        description: `From Spotify - ${track.album.name} (30s preview)`,
-        albumArt: track.album.images[0]?.url || track.album.images[1]?.url || '',
-        audioUrl: track.preview_url, // Only use preview_url
-        userId: user.uid,
-        createdAt: Date.now(),
-        sourceType: 'external',
-        externalId: track.id,
-        externalSource: 'spotify'
-      };
-
-      const res = await fetch('/api/songs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(songData)
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Failed to add song to library');
-      }
-
-      // Reload library songs
-      await loadAllSongs();
-      alert(`"${track.name}" berhasil ditambahkan ke library!`);
+      
+      // Track has preview, add directly
+      await addTrackToLibrary(track);
     } catch (err: any) {
-      console.error('Error adding track:', err);
-      alert('Gagal menambahkan lagu: ' + (err.message || 'Unknown error'));
-    } finally {
       addingToLibrary = null;
+      showErrorModal('Error', 'Failed to add track: ' + (err.message || 'Unknown error'));
     }
+  }
+
+  async function addTrackToLibrary(track: SpotifyTrack) {
+    if (!user) return;
+
+    const songData = {
+      title: track.name,
+      artist: track.artists.map(a => a.name).join(', '),
+      genre: 'Pop', // Default, bisa diubah nanti
+      description: track.preview_url 
+        ? `From Spotify - ${track.album.name} (30s preview)`
+        : `From Spotify - ${track.album.name} (Open in Spotify app)`,
+      albumArt: track.album.images[0]?.url || track.album.images[1]?.url || '',
+      // Use preview_url if available, otherwise use external URL (will open in Spotify)
+      audioUrl: track.preview_url || track.external_urls.spotify,
+      userId: user.uid,
+      createdAt: Date.now(),
+      sourceType: 'external',
+      externalId: track.id,
+      externalSource: 'spotify'
+    };
+
+    const res = await fetch('/api/songs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(songData)
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to add song to library');
+    }
+
+    // Reload library songs
+    await loadAllSongs();
+    const message = track.preview_url 
+      ? `"${track.name}" has been added to your library! You can play the 30-second preview in the app.`
+      : `"${track.name}" has been added to your library! It will open in Spotify app when played.`;
+    showSuccessModal('Success!', message);
+    addingToLibrary = null;
   }
 
   function formatDuration(ms: number): string {
@@ -219,6 +249,56 @@
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  // Custom modal functions
+  function showSuccessModal(title: string, message: string) {
+    modalTitle = title;
+    modalMessage = message;
+    modalType = 'success';
+    modalConfirmCallback = null;
+    modalCancelCallback = null;
+    showModal = true;
+  }
+
+  function showConfirmModal(title: string, message: string, onConfirm: () => void, onCancel?: () => void) {
+    modalTitle = title;
+    modalMessage = message;
+    modalType = 'confirm';
+    modalConfirmCallback = onConfirm;
+    modalCancelCallback = onCancel || null;
+    showModal = true;
+  }
+
+  function showErrorModal(title: string, message: string) {
+    modalTitle = title;
+    modalMessage = message;
+    modalType = 'error';
+    modalConfirmCallback = null;
+    modalCancelCallback = null;
+    showModal = true;
+  }
+
+  function closeModal() {
+    showModal = false;
+    modalTitle = '';
+    modalMessage = '';
+    modalConfirmCallback = null;
+    modalCancelCallback = null;
+  }
+
+  function handleModalConfirm() {
+    if (modalConfirmCallback) {
+      modalConfirmCallback();
+    }
+    closeModal();
+  }
+
+  function handleModalCancel() {
+    if (modalCancelCallback) {
+      modalCancelCallback();
+    }
+    closeModal();
   }
 
   let spotifySearchTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -489,9 +569,9 @@
               <div class="flex gap-2">
                 <button
                   on:click={() => addSpotifyTrackToLibrary(track)}
-                  disabled={addingToLibrary === track.id || !track.preview_url}
+                  disabled={addingToLibrary === track.id}
                   class="p-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition flex-shrink-0"
-                  title={track.preview_url ? "Add to Library (30s preview)" : "No preview available"}
+                  title={track.preview_url ? "Add to Library (30s preview)" : "Add to Library (opens in Spotify app)"}
                 >
                   {#if addingToLibrary === track.id}
                     <svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -503,19 +583,17 @@
                     </svg>
                   {/if}
                 </button>
-                {#if track.preview_url}
-                  <a
-                    href={track.external_urls.spotify}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition flex-shrink-0"
-                    title="Open in Spotify"
-                  >
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.42 1.56-.299.421-1.02.599-1.559.3z"/>
-                    </svg>
-                  </a>
-                {/if}
+                <a
+                  href={track.external_urls.spotify}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition flex-shrink-0"
+                  title="Open in Spotify"
+                >
+                  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.42 1.56-.299.421-1.02.599-1.559.3z"/>
+                  </svg>
+                </a>
               </div>
             </div>
           {/each}
@@ -529,6 +607,92 @@
           <p class="text-gray-400">Enter a search query to find tracks on Spotify</p>
         </div>
       {/if}
+    {/if}
+
+    <!-- Custom Modal -->
+    {#if showModal}
+      <div 
+        class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" 
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        tabindex="-1"
+        on:click={closeModal} 
+        on:keydown={(e) => {
+          if (e.key === 'Escape') closeModal();
+        }}
+      >
+        <div 
+          class="bg-gray-800 rounded-lg shadow-2xl max-w-md w-full p-6"
+        >
+          <!-- Modal Header -->
+          <div class="flex items-center justify-between mb-4">
+            <h3 id="modal-title" class="text-xl font-bold text-white">
+              {#if modalType === 'success'}
+                <span class="flex items-center gap-2">
+                  <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {modalTitle}
+                </span>
+              {:else if modalType === 'error'}
+                <span class="flex items-center gap-2">
+                  <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {modalTitle}
+                </span>
+              {:else}
+                <span class="flex items-center gap-2">
+                  <svg class="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {modalTitle}
+                </span>
+              {/if}
+            </h3>
+            <button
+              on:click={closeModal}
+              class="text-gray-400 hover:text-white transition"
+              aria-label="Close modal"
+            >
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Modal Body -->
+          <div class="mb-6">
+            <p class="text-gray-300 whitespace-pre-line">{modalMessage}</p>
+          </div>
+
+          <!-- Modal Footer -->
+          <div class="flex gap-3 justify-end">
+            {#if modalType === 'confirm'}
+              <button
+                on:click={handleModalCancel}
+                class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                on:click={handleModalConfirm}
+                class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition font-medium"
+              >
+                Confirm
+              </button>
+            {:else}
+              <button
+                on:click={closeModal}
+                class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition font-medium"
+              >
+                OK
+              </button>
+            {/if}
+          </div>
+        </div>
+      </div>
     {/if}
 
     <!-- Back to Library -->
