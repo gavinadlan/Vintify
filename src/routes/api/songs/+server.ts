@@ -32,12 +32,12 @@ export const GET: RequestHandler = async ({ url }) => {
         } else {
           q = query(base);
         }
-        const qs = await getDocs(q);
+    const qs = await getDocs(q);
         const songs = qs.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<{ id: string; createdAt?: number; [key: string]: any }>;
         // Sort manually
         songs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         console.log('Found', songs.length, 'songs (without orderBy)');
-        return json({ songs });
+    return json({ songs });
       }
       throw queryError;
     }
