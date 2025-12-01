@@ -8,6 +8,14 @@
   let loading = false;
 
   async function handleReset() {
+    error = '';
+    success = false;
+    
+    if (!auth) {
+      error = 'Firebase is not configured. Please set PUBLIC_FIREBASE_* envs and restart.';
+      return;
+    }
+    
     if (!email) {
       error = 'Please enter your email address';
       return;
@@ -18,18 +26,21 @@
       return;
     }
 
-    error = '';
     loading = true;
-    success = false;
 
     try {
-      await sendPasswordResetEmail(auth, email);
+      console.log('Sending password reset email to:', email);
+      await sendPasswordResetEmail(auth as any, email);
+      console.log('Password reset email sent successfully');
       success = true;
     } catch (err: any) {
+      console.error('Password reset error:', err);
       if (err.code === 'auth/user-not-found') {
         error = 'No account found with this email';
+      } else if (err.code === 'auth/invalid-email') {
+        error = 'Invalid email address format';
       } else {
-        error = 'Failed to send reset email. Please try again.';
+        error = `Failed to send reset email: ${err.message || 'Please try again.'}`;
       }
     } finally {
       loading = false;
