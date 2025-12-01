@@ -16,6 +16,13 @@ const measurementId = publicEnv.PUBLIC_FIREBASE_MEASUREMENT_ID || (import.meta.e
 const hasFirebaseEnv = Boolean(apiKey && projectId && appId);
 if (browser && !hasFirebaseEnv) {
   console.warn('Firebase env missing. Set PUBLIC_FIREBASE_API_KEY, PUBLIC_FIREBASE_PROJECT_ID, PUBLIC_FIREBASE_APP_ID');
+} else if (browser && hasFirebaseEnv) {
+  console.log('Firebase config loaded:', {
+    hasApiKey: !!apiKey,
+    hasProjectId: !!projectId,
+    hasAppId: !!appId,
+    authDomain: authDomain || 'auto-generated'
+  });
 }
 
 const firebaseConfig = {
