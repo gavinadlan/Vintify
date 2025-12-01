@@ -11,10 +11,14 @@
   let loading = false;
 
   async function handleRegister() {
+    error = '';
+    
     if (!auth) {
       error = 'Firebase is not configured. Please set PUBLIC_FIREBASE_* envs and restart.';
+      console.error('Firebase auth not available');
       return;
     }
+    
     if (!name || !email || !password || !confirmPassword) {
       error = 'Please fill in all fields';
       return;
@@ -35,20 +39,32 @@
       return;
     }
 
-    error = '';
     loading = true;
 
     try {
+      console.log('Creating user account...');
       const userCredential = await createUserWithEmailAndPassword(auth as any, email, password);
+      console.log('User created, updating profile...');
       await updateProfile(userCredential.user, { displayName: name });
+      console.log('Profile updated, redirecting to library...');
       goto('/library');
     } catch (err: any) {
+      console.error('Registration error:', err);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
+      
       if (err.code === 'auth/email-already-in-use') {
-        error = 'An account with this email already exists';
+        error = 'An account with this email already exists. Try logging in instead.';
       } else if (err.code === 'auth/weak-password') {
-        error = 'Password is too weak';
+        error = 'Password is too weak. Please use a stronger password (at least 6 characters).';
+      } else if (err.code === 'auth/invalid-email') {
+        error = 'Invalid email address format. Please check your email.';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        error = 'Email/password accounts are not enabled. Please contact support.';
+      } else if (err.code === 'auth/network-request-failed') {
+        error = 'Network error. Please check your internet connection and try again.';
       } else {
-        error = 'Failed to create account. Please try again.';
+        error = `Failed to create account: ${err.message || 'Please try again.'}`;
       }
     } finally {
       loading = false;
@@ -63,7 +79,12 @@
 
     {#if error}
       <div class="bg-red-500/10 border border-red-500 text-red-500 px-4 py-3 rounded mb-4">
-        {error}
+        <p class="font-medium">{error}</p>
+        {#if error.includes('already exists')}
+          <p class="text-sm text-red-400 mt-2">
+            Already have an account? <a href="/login" class="underline font-medium">Login here</a>
+          </p>
+        {/if}
       </div>
     {/if}
 
